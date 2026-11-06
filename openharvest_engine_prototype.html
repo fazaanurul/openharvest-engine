@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OpenHarvest Engine v0.4.0 — Open-Source 2D Farming RPG Framework</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pixel-font: 'Press Start 2P', monospace;
+            --mono-font: 'JetBrains Mono', monospace;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .pixel-title {
+            font-family: var(--pixel-font);
+            text-shadow: 2px 2px 0px #000;
+        }
+        .mono-code {
+            font-family: var(--mono-font);
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 4px #334155;
+            border-radius: 12px;
+            background-color: #3b7a57;
+            cursor: crosshair;
+        }
+        /* Custom Scrollbar for Modding Panel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+        .hotbar-slot {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .hotbar-slot.active {
+            transform: translateY(-6px) scale(1.06);
+            box-shadow: 0 10px 20px -5px rgba(251, 191, 36, 0.5), 0 0 0 3px #fbbf24;
+            background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+        }
+        .dpad-btn:active {
+            transform: scale(0.92);
+            background-color: rgba(251, 191, 36, 0.3);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between bg-slate-950 overflow-hidden">
+
+    <!-- Top Engine Header / Telemetry Bar -->
+    <header class="w-full bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 z-20">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 bg-emerald-950/80 border border-emerald-700/60 px-2.5 py-1 rounded-lg">
+                <span class="text-lg">🌱</span>
+                <span class="pixel-title text-xs sm:text-sm text-emerald-400 tracking-wider">OpenHarvest</span>
+                <span class="mono-code text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">v0.4.0-MIT</span>
+            </div>
+
+            <!-- Live Game Stats -->
+            <div class="flex items-center gap-2 sm:gap-4 bg-slate-800/90 border border-slate-700 px-3 py-1 rounded-lg text-xs sm:text-sm">
+                <div class="flex items-center gap-1.5" title="Current Season & Day">
+                    <span id="weather-icon">☀️</span>
+                    <span class="font-semibold text-amber-200" id="hud-day">Spring Day 1</span>
+                    <span class="text-slate-400 mono-code text-xs hidden sm:inline" id="hud-time">08:00 AM</span>
+                </div>
+                <div class="h-4 w-[1px] bg-slate-700"></div>
+                <div class="flex items-center gap-1" title="Gold Coins">
+                    <span>🪙</span>
+                    <span class="font-bold text-amber-400 mono-code" id="hud-gold">500</span>
+                    <span class="text-[10px] text-amber-500 font-bold">G</span>
+                </div>
+                <div class="h-4 w-[1px] bg-slate-700"></div>
+                <!-- Stamina Bar -->
+                <div class="flex items-center gap-1.5" title="Player Stamina">
+                    <span>⚡</span>
+                    <div class="w-20 sm:w-28 h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-700 p-0.5">
+                        <div id="hud-stamina-bar" class="h-full bg-gradient-to-r from-emerald-500 to-lime-400 rounded-full transition-all duration-200" style="width: 100%;"></div>
+                    </div>
+                    <span class="mono-code text-[11px] text-slate-300" id="hud-stamina-text">100/100</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engine Actions & Open-Source Modding Toggle -->
+        <div class="flex items-center gap-2">
+            <button id="btn-rain" onclick="game.toggleRain()" class="px-2.5 py-1.5 rounded-lg bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-700/60 text-xs font-medium flex items-center gap-1.5 transition shadow-sm">
+                <span>🌧️</span> <span class="hidden md:inline">Toggle Rain</span>
+            </button>
+            <button onclick="game.sleepNextDay()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/40 text-xs font-semibold flex items-center gap-1.5 transition shadow-md active:scale-95">
+                <span>🛌</span> <span>Sleep (Next Day)</span>
+            </button>
+            <button onclick="game.toggleInspector()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 text-xs font-mono flex items-center gap-1.5 transition">
+                <span>⚙️</span> <span class="hidden sm:inline">Engine SDK / Mod JSON</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace: Canvas + Optional SDK Inspector Drawer -->
+    <main class="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-4">
+        
+        <!-- Game Viewport Wrapper -->
+        <div id="canvas-container" class="relative flex items-center justify-center w-full h-full">
+            <canvas id="gameCanvas" width="768" height="528"></canvas>
+
+            <!-- Floating Controls Hint Overlay (Top-Left inside viewport) -->
+            <div class="absolute top-3 left-3 pointer-events-none hidden lg:flex flex-col gap-1 bg-slate-900/80 backdrop-blur-md p-2.5 rounded-xl border border-slate-700/80 text-[11px] text-slate-300 max-w-xs shadow-lg">
+                <div class="font-semibold text-amber-400 flex items-center justify-between">
+                    <span>🎮 Controls & Guide</span>
+                    <span class="mono-code text-[10px] text-slate-400">ECS Tile Engine</span>
+                </div>
+                <div><span class="text-white font-mono bg-slate-800 px-1 rounded">WASD / Arrows</span> Move Farmer</div>
+                <div><span class="text-white font-mono bg-slate-800 px-1 rounded">SPACE / Click Tile</span> Use Tool / Action</div>
+                <div><span class="text-white font-mono bg-slate-800 px-1 rounded">1 - 7</span> Select Tool or Seed Packet</div>
+                <div class="text-slate-400 pt-1 border-t border-slate-800 mt-0.5">
+                    💡 <span class="text-emerald-300">Tip:</span> Till grass with <b>Hoe</b> → Plant <b>Seeds</b> → Water daily with <b>Can</b> → <b>Sleep</b> to grow → <b>Harvest</b> for Gold! Refill Watering Can at the <b>Pond</b>.
+                </div>
+            </div>
+
+            <!-- Mobile On-Screen Touch D-Pad + Action Button -->
+            <div class="lg:hidden absolute bottom-4 left-4 flex items-center gap-2 z-10 opacity-85">
+                <div class="grid grid-cols-3 gap-1 w-28 h-28">
+                    <div></div>
+                    <button onpointerdown="game.setTouchDir(0, -1)" onpointerup="game.setTouchDir(0, 0)" onpointerleave="game.setTouchDir(0, 0)" class="dpad-btn bg-slate-800/90 border border-slate-600 rounded-lg flex items-center justify-center text-lg">▲</button>
+                    <div></div>
+                    <button onpointerdown="game.setTouchDir(-1, 0)" onpointerup="game.setTouchDir(0, 0)" onpointerleave="game.setTouchDir(0, 0)" class="dpad-btn bg-slate-800/90 border border-slate-600 rounded-lg flex items-center justify-center text-lg">◀</button>
+                    <button onclick="game.interactFacingTile()" class="dpad-btn bg-amber-600/90 border border-amber-400 rounded-lg flex items-center justify-center text-xs font-bold">ACT</button>
+                    <button onpointerdown="game.setTouchDir(1, 0)" onpointerup="game.setTouchDir(0, 0)" onpointerleave="game.setTouchDir(0, 0)" class="dpad-btn bg-slate-800/90 border border-slate-600 rounded-lg flex items-center justify-center text-lg">▶</button>
+                    <div></div>
+                    <button onpointerdown="game.setTouchDir(0, 1)" onpointerup="game.setTouchDir(0, 0)" onpointerleave="game.setTouchDir(0, 0)" class="dpad-btn bg-slate-800/90 border border-slate-600 rounded-lg flex items-center justify-center text-lg">▼</button>
+                    <div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open-Source Engine SDK / Live JSON Modding Drawer -->
+        <aside id="sdk-drawer" class="hidden absolute right-0 top-0 bottom-0 w-full sm:w-96 bg-slate-900/95 backdrop-blur-xl border-l border-slate-700 p-4 flex flex-col gap-3 z-30 shadow-2xl overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div>
+                    <h2 class="font-bold text-sm text-amber-400 mono-code flex items-center gap-1.5">
+                        <span>🛠️</span> OpenHarvest Registry SDK
+                    </h2>
+                    <p class="text-[11px] text-slate-400">Live Data-Driven Crop & World Config</p>
+                </div>
+                <button onclick="game.toggleInspector()" class="text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 text-xs">✕</button>
+            </div>
+
+            <!-- Telemetry Metrics -->
+            <div class="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 mono-code text-[11px]">
+                <div>
+                    <div class="text-slate-500">FPS / TICK</div>
+                    <div class="text-emerald-400 font-bold" id="sdk-fps">60 FPS</div>
+                </div>
+                <div>
+                    <div class="text-slate-500">ENTITIES</div>
+                    <div class="text-sky-400 font-bold" id="sdk-entities">192 Tiles</div>
+                </div>
+                <div>
+                    <div class="text-slate-500">ACTIVE CROPS</div>
+                    <div class="text-amber-400 font-bold" id="sdk-crops">0 Planted</div>
+                </div>
+            </div>
+
+            <!-- Live JSON Editor for Crop Registry -->
+            <div class="flex-1 flex flex-col gap-1.5">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="mono-code text-slate-300 font-semibold">crops.registry.json</span>
+                    <button onclick="game.applyCustomRegistry()" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold transition">
+                        Hot-Reload JSON
+                    </button>
+                </div>
+                <textarea id="sdk-json-editor" spellcheck="false" class="w-full flex-1 min-h-[210px] bg-slate-950 text-emerald-300 mono-code text-xs p-3 rounded-lg border border-slate-800 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"></textarea>
+                <p id="sdk-status" class="text-[11px] text-slate-400 mono-code">Modify seed costs, growth stages, or sell prices and click Hot-Reload.</p>
+            </div>
+
+            <!-- State Persistence / Serialization -->
+            <div class="border-t border-slate-800 pt-3 flex flex-col gap-2">
+                <div class="text-xs font-semibold text-slate-300">World State Serialization</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="game.saveToLocal()" class="py-1.5 px-3 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-medium text-slate-200 transition">
+                        💾 Save State
+                    </button>
+                    <button onclick="game.resetWorld()" class="py-1.5 px-3 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-xs font-medium text-rose-200 transition">
+                        🗑️ Reset Farm
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Bottom Hotbar & Tool/Seed Selector -->
+    <footer class="w-full bg-slate-900/95 border-t border-slate-800 px-3 py-2 flex flex-col sm:flex-row items-center justify-center gap-2 z-20">
+        <div id="hotbar-container" class="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto max-w-full py-1 px-2">
+            <!-- Dynamically populated by JS -->
+        </div>
+    </footer>
+
+    <script>
+        /**
+         * ============================================================================
+         * OPENHARVEST ENGINE v0.4.0 (MIT License Prototype)
+         * A lightweight, modular, data-driven 2D Top-Down Farming RPG Engine in HTML5.
+         * Designed with clean separation of Registry Data, Tilemap State, and Renderer.
+         * ============================================================================
+         */
+
+        // --- 1. DEFAULT MODDABLE CROP REGISTRY ---
+        const DEFAULT_CROP_REGISTRY = {
+            turnip: {
+                id: "turnip",
+                name: "Turnip",
+                icon: "🌱",
+                harvestIcon: "🧅",
+                seedCost: 20,
+                sellPrice: 60,
+                daysToGrow: 3,
+                regrows: false,
+                color: "#e2e8f0"
+            },
+            potato: {
+                id: "potato",
+                name: "Potato",
+                icon: "🥔",
+                harvestIcon: "🥔",
+                seedCost: 50,
+                sellPrice: 140,
+                daysToGrow: 4,
+                regrows: false,
+                color: "#d97706"
+            },
+            strawberry: {
+                id: "strawberry",
+                name: "Strawberry",
+                icon: "🍓",
+                harvestIcon: "🍓",
+                seedCost: 100,
+                sellPrice: 120,
+                daysToGrow: 4,
+                regrows: true, // Regrows every 2 days after first harvest!
+                color: "#f43f5e"
+            },
+            pumpkin: {
+                id: "pumpkin",
+                name: "Golden Pumpkin",
+                icon: "🎃",
+                harvestIcon: "🎃",
+                seedCost: 180,
+                sellPrice: 520,
+                daysToGrow: 5,
+                regrows: false,
+                color: "#f59e0b"
+            }
+        };
+
+        // --- 2. TILE TYPES & CONSTANTS ---
+        const TILE_SIZE = 48;
+        const MAP_COLS = 16;
+        const MAP_ROWS = 11;
+
+        const TILE_TYPES = {
+            GRASS: 0,
+            DIRT: 1,
+            TILLED: 2,
+            WATER: 3,
+            PATH: 4,
+            HOUSE: 5,
+            SHIPPING_BIN: 6,
+            FENCE: 7
+        };
+
+        // --- 3. SOUND SYNTHESIS (Web Audio API - Zero External Assets Needed) ---
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+            }
+            play(type) {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    if (type === 'hoe') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(140, now);
+                        osc.frequency.exponentialRampToValueAtTime(60, now + 0.09);
+                        gain.gain.setValueAtTime(0.25, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.09);
+                        osc.start(now);
+                        osc.stop(now + 0.09);
+                    } else if (type === 'water') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(320, now);
+                        osc.frequency.exponentialRampToValueAtTime(580, now + 0.14);
+                        gain.gain.setValueAtTime(0.18, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.14);
+                        osc.start(now);
+                        osc.stop(now + 0.14);
+                    } else if (type === 'plant') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(420, now);
+                        osc.frequency.exponentialRampToValueAtTime(660, now + 0.08);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                        osc.start(now);
+                        osc.stop(now + 0.08);
+                    } else if (type === 'coin') {
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(587.33, now); // D5
+                        osc.frequency.setValueAtTime(880, now + 0.07); // A5
+                        gain.gain.setValueAtTime(0.12, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.22);
+                        osc.start(now);
+                        osc.stop(now + 0.22);
+                    } else if (type === 'error') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(130, now);
+                        osc.frequency.setValueAtTime(95, now + 0.1);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+                        osc.start(now);
+                        osc.stop(now + 0.18);
+                    }
+                } catch (e) {
+                    // Ignore audio restriction errors
+                }
+            }
+        }
+
+        // --- 4. CORE ENGINE CLASS ---
+        class OpenHarvestEngine {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.sfx = new SoundFX();
+
+                this.cropRegistry = JSON.parse(JSON.stringify(DEFAULT_CROP_REGISTRY));
+
+                // World & Time State
+                this.day = 1;
+                this.gold = 500;
+                this.stamina = 100;
+                this.maxStamina = 100;
+                this.waterCanLevel = 20;
+                this.waterCanMax = 20;
+                this.isRaining = false;
+                this.timeMinutes = 480; // 8:00 AM
+
+                // Player Entity
+                this.player = {
+                    x: 7 * TILE_SIZE + TILE_SIZE / 2,
+                    y: 4 * TILE_SIZE + TILE_SIZE / 2,
+                    speed: 195,
+                    dirX: 0,
+                    dirY: 1, // Facing down initially
+                    walkFrame: 0,
+                    actionTimer: 0
+                };
+
+                // Input State
+                this.keys = {};
+                this.touchDir = { x: 0, y: 0 };
+                this.hoveredTile = { col: -1, row: -1 };
+                this.selectedSlot = 0;
+
+                // Visual Effects
+                this.particles = [];
+                this.floatingTexts = [];
+                this.rainDrops = [];
+                this.dayTransitionAlpha = 0;
+
+                // FPS Counter
+                this.lastTime = performance.now();
+                this.fps = 60;
+
+                this.buildHotbarItems();
+                this.initMap();
+                this.loadFromLocal();
+                this.bindEvents();
+                this.renderHotbarUI();
+                this.updateHUD();
+                this.syncInspectorJSON();
+
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            buildHotbarItems() {
+                this.hotbar = [
+                    { id: 'hoe', type: 'tool', name: 'Iron Hoe', icon: '⛏️', costText: '2 ⚡', desc: 'Till soil for planting' },
+                    { id: 'water', type: 'tool', name: 'Water Can', icon: '🚿', costText: '2 ⚡', desc: 'Water planted crops' },
+                    { id: 'scythe', type: 'tool', name: 'Harvest Basket', icon: '🧺', costText: 'Free', desc: 'Harvest ripe crops or clear weeds' }
+                ];
+
+                Object.values(this.cropRegistry).forEach(crop => {
+                    this.hotbar.push({
+                        id: crop.id,
+                        type: 'seed',
+                        name: `${crop.name} Seed`,
+                        icon: crop.icon,
+                        costText: `${crop.seedCost}G`,
+                        cropData: crop
+                    });
+                });
+            }
+
+            initMap() {
+                this.tiles = [];
+                for (let r = 0; r < MAP_ROWS; r++) {
+                    const row = [];
+                    for (let c = 0; c < MAP_COLS; c++) {
+                        let type = TILE_TYPES.GRASS;
+                        let deco = null;
+
+                        // Outer Fence Border
+                        if (r === 0 || r === MAP_ROWS - 1 || c === 0 || c === MAP_COLS - 1) {
+                            type = TILE_TYPES.FENCE;
+                        }
+                        // Farmhouse at Top-Left (Cols 2-4, Rows 1-2)
+                        else if (r >= 1 && r <= 2 && c >= 2 && c <= 4) {
+                            type = TILE_TYPES.HOUSE;
+                        }
+                        // Shipping Bin next to house (Col 5, Row 2)
+                        else if (r === 2 && c === 5) {
+                            type = TILE_TYPES.SHIPPING_BIN;
+                        }
+                        // Stone Path leading from house
+                        else if ((r === 3 && c >= 3 && c <= 8) || (c === 7 && r >= 3 && r <= 4)) {
+                            type = TILE_TYPES.PATH;
+                        }
+                        // Water Pond (Bottom-Right Cols 12-14, Rows 7-9)
+                        else if (r >= 7 && r <= 9 && c >= 12 && c <= 14) {
+                            type = TILE_TYPES.WATER;
+                        }
+                        // Fertile Farm Field Area (Cols 2-10, Rows 4-9)
+                        else if (r >= 4 && r <= 9 && c >= 2 && c <= 10) {
+                            type = TILE_TYPES.DIRT;
+                            // Pre-plant a couple starter demo crops on Day 1
+                            if (r === 5 && (c === 4 || c === 5)) {
+                                type = TILE_TYPES.TILLED;
+                            }
+                        } else {
+                            // Decorative grass flowers/pebbles
+                            if (Math.random() < 0.22) {
+                                deco = Math.random() < 0.5 ? 'flower' : 'pebble';
+                            }
+                        }
+
+                        row.push({
+                            col: c,
+                            row: r,
+                            type: type,
+                            watered: (r === 5 && c === 4),
+                            crop: (r === 5 && (c === 4 || c === 5)) ? {
+                                id: 'turnip',
+                                daysGrown: c === 4 ? 3 : 1, // One ready to harvest immediately!
+                            } : null,
+                            deco: deco
+                        });
+                    }
+                    this.tiles.push(row);
+                }
+            }
+
+            bindEvents() {
+                window.addEventListener('keydown', (e) => {
+                    if (document.activeElement.tagName === 'TEXTAREA') return;
+
+                    this.keys[e.code] = true;
+
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        this.interactFacingTile();
+                    }
+                    // Number keys 1-7
+                    if (e.code.startsWith('Digit')) {
+                        const num = parseInt(e.code.replace('Digit', ''), 10) - 1;
+                        if (num >= 0 && num < this.hotbar.length) {
+                            this.selectSlot(num);
+                        }
+                    }
+                });
+
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const scaleX = this.canvas.width / rect.width;
+                    const scaleY = this.canvas.height / rect.height;
+                    const mx = (e.clientX - rect.left) * scaleX;
+                    const my = (e.clientY - rect.top) * scaleY;
+                    this.hoveredTile.col = Math.floor(mx / TILE_SIZE);
+                    this.hoveredTile.row = Math.floor(my / TILE_SIZE);
+                });
+
+                this.canvas.addEventListener('pointerdown', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const scaleX = this.canvas.width / rect.width;
+                    const scaleY = this.canvas.height / rect.height;
+                    const mx = (e.clientX - rect.left) * scaleX;
+                    const my = (e.clientY - rect.top) * scaleY;
+                    const col = Math.floor(mx / TILE_SIZE);
+                    const row = Math.floor(my / TILE_SIZE);
+                    this.interactAtTile(col, row);
+                });
+            }
+
+            setTouchDir(dx, dy) {
+                this.touchDir.x = dx;
+                this.touchDir.y = dy;
+            }
+
+            selectSlot(index) {
+                this.selectedSlot = index;
+                this.renderHotbarUI();
+            }
+
+            getTargetTile() {
+                const pCol = Math.floor(this.player.x / TILE_SIZE);
+                const pRow = Math.floor(this.player.y / TILE_SIZE);
+                return {
+                    col: pCol + this.player.dirX,
+                    row: pRow + this.player.dirY
+                };
+            }
+
+            interactFacingTile() {
+                const target = this.getTargetTile();
+                this.interactAtTile(target.col, target.row, true);
+            }
+
+            interactAtTile(col, row, fromKeyboard = false) {
+                if (row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return;
+
+                // Check distance from player center
+                const tileCenterX = col * TILE_SIZE + TILE_SIZE / 2;
+                const tileCenterY = row * TILE_SIZE + TILE_SIZE / 2;
+                const dist = Math.hypot(tileCenterX - this.player.x, tileCenterY - this.player.y);
+
+                if (!fromKeyboard && dist > TILE_SIZE * 2.1) {
+                    this.spawnFloatingText(tileCenterX, tileCenterY, "Too far away!", "#f87171");
+                    this.sfx.play('error');
+                    return;
+                }
+
+                // Face the clicked tile
+                const dx = tileCenterX - this.player.x;
+                const dy = tileCenterY - this.player.y;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    this.player.dirX = dx > 0 ? 1 : -1;
+                    this.player.dirY = 0;
+                } else {
+                    this.player.dirX = 0;
+                    this.player.dirY = dy > 0 ? 1 : -1;
+                }
+
+                this.player.actionTimer = 0.18;
+                const tile = this.tiles[row][col];
+                const activeItem = this.hotbar[this.selectedSlot];
+
+                // 1. Check if clicking Farmhouse -> Sleep prompt
+                if (tile.type === TILE_TYPES.HOUSE) {
+                    this.sleepNextDay();
+                    return;
+                }
+
+                // 2. Check if clicking Water Pond -> Refill Watering Can
+                if (tile.type === TILE_TYPES.WATER) {
+                    this.waterCanLevel = this.waterCanMax;
+                    this.sfx.play('water');
+                    this.spawnParticles(tileCenterX, tileCenterY, '#38bdf8', 12);
+                    this.spawnFloatingText(tileCenterX, tileCenterY, "Water Can Refilled! 💧", "#38bdf8");
+                    this.renderHotbarUI();
+                    return;
+                }
+
+                // 3. Check if tile has a fully grown crop -> Always allow harvesting!
+                if (tile.crop) {
+                    const cropDef = this.cropRegistry[tile.crop.id];
+                    if (cropDef && tile.crop.daysGrown >= cropDef.daysToGrow) {
+                        this.harvestTile(tile, cropDef, tileCenterX, tileCenterY);
+                        return;
+                    }
+                }
+
+                if (!activeItem) return;
+
+                // 4. Handle Tool or Seed
+                if (activeItem.id === 'hoe') {
+                    if (tile.type === TILE_TYPES.DIRT || tile.type === TILE_TYPES.GRASS) {
+                        if (!this.consumeStamina(2, tileCenterX, tileCenterY)) return;
+                        tile.type = TILE_TYPES.TILLED;
+                        tile.deco = null;
+                        this.sfx.play('hoe');
+                        this.spawnParticles(tileCenterX, tileCenterY, '#92400e', 10);
+                    } else if (tile.type === TILE_TYPES.TILLED && !tile.crop) {
+                        this.spawnFloatingText(tileCenterX, tileCenterY, "Already tilled!", "#94a3b8");
+                    }
+                }
+                else if (activeItem.id === 'water') {
+                    if (tile.type === TILE_TYPES.TILLED) {
+                        if (this.waterCanLevel <= 0) {
+                            this.spawnFloatingText(tileCenterX, tileCenterY, "Water Can Empty! Refill at Pond", "#38bdf8");
+                            this.sfx.play('error');
+                            return;
+                        }
+                        if (!this.consumeStamina(2, tileCenterX, tileCenterY)) return;
+                        tile.watered = true;
+                        this.waterCanLevel--;
+                        this.sfx.play('water');
+                        this.spawnParticles(tileCenterX, tileCenterY, '#38bdf8', 12);
+                        this.renderHotbarUI();
+                    } else {
+                        this.spawnFloatingText(tileCenterX, tileCenterY, "Till soil first!", "#94a3b8");
+                    }
+                }
+                else if (activeItem.id === 'scythe') {
+                    if (tile.crop) {
+                        const cropDef = this.cropRegistry[tile.crop.id];
+                        const left = Math.max(0, cropDef.daysToGrow - tile.crop.daysGrown);
+                        this.spawnFloatingText(tileCenterX, tileCenterY, `${cropDef.name}: ${left}d left`, "#fbbf24");
+                    } else {
+                        this.spawnFloatingText(tileCenterX, tileCenterY, "Nothing ripe here", "#94a3b8");
+                    }
+                }
+                else if (activeItem.type === 'seed') {
+                    const cropDef = this.cropRegistry[activeItem.id];
+                    if (tile.type !== TILE_TYPES.TILLED) {
+                        this.spawnFloatingText(tileCenterX, tileCenterY, "Till dirt with Hoe first!", "#fbbf24");
+                        this.sfx.play('error');
+                        return;
+                    }
+                    if (tile.crop) {
+                        this.spawnFloatingText(tileCenterX, tileCenterY, "Already planted!", "#fbbf24");
+                        return;
+                    }
+                    if (this.gold < cropDef.seedCost) {
+                        this.spawnFloatingText(tileCenterX, tileCenterY, `Need ${cropDef.seedCost}G!`, "#f87171");
+                        this.sfx.play('error');
+                        return;
+                    }
+                    if (!this.consumeStamina(1, tileCenterX, tileCenterY)) return;
+
+                    this.gold -= cropDef.seedCost;
+                    tile.crop = {
+                        id: cropDef.id,
+                        daysGrown: 0
+                    };
+                    if (this.isRaining) tile.watered = true;
+
+                    this.sfx.play('plant');
+                    this.spawnParticles(tileCenterX, tileCenterY, '#a3e635', 8);
+                    this.spawnFloatingText(tileCenterX, tileCenterY, `-${cropDef.seedCost}G (${cropDef.name})`, "#cbd5e1");
+                    this.updateHUD();
+                }
+            }
+
+            harvestTile(tile, cropDef, x, y) {
+                this.gold += cropDef.sellPrice;
+                this.sfx.play('coin');
+                this.spawnParticles(x, y, '#fbbf24', 18);
+                this.spawnFloatingText(x, y, `+${cropDef.sellPrice}G ${cropDef.harvestIcon}`, "#4ade80");
+
+                if (cropDef.regrows) {
+                    tile.crop.daysGrown = Math.max(0, cropDef.daysToGrow - 2);
+                    this.spawnFloatingText(x, y - 18, "Regrows in 2d!", "#38bdf8");
+                } else {
+                    tile.crop = null;
+                }
+                this.updateHUD();
+            }
+
+            consumeStamina(amount, x, y) {
+                if (this.stamina < amount) {
+                    this.spawnFloatingText(x, y, "Exhausted! Sleep to recover 🛌", "#f87171");
+                    this.sfx.play('error');
+                    return false;
+                }
+                this.stamina = Math.max(0, this.stamina - amount);
+                this.updateHUD();
+                return true;
+            }
+
+            sleepNextDay() {
+                this.day++;
+                this.stamina = this.maxStamina;
+                this.timeMinutes = 480; // Reset to 08:00 AM
+                this.dayTransitionAlpha = 1.0;
+
+                // 30% chance of rain next day
+                this.isRaining = Math.random() < 0.3;
+
+                let grownCount = 0;
+                for (let r = 0; r < MAP_ROWS; r++) {
+                    for (let c = 0; c < MAP_COLS; c++) {
+                        const tile = this.tiles[r][c];
+                        if (tile.crop) {
+                            const cropDef = this.cropRegistry[tile.crop.id];
+                            if (tile.watered && cropDef && tile.crop.daysGrown < cropDef.daysToGrow) {
+                                tile.crop.daysGrown++;
+                                grownCount++;
+                            }
+                        }
+                        // Reset watered state, or auto-water if raining today!
+                        if (tile.type === TILE_TYPES.TILLED) {
+                            tile.watered = this.isRaining;
+                        }
+                    }
+                }
+
+                this.sfx.play('coin');
+                this.spawnFloatingText(
+                    this.player.x,
+                    this.player.y - 20,
+                    `Day ${this.day}! (${grownCount} crops grew)`,
+                    "#fbbf24"
+                );
+                this.updateHUD();
+                this.saveToLocal(true);
+            }
+
+            toggleRain() {
+                this.isRaining = !this.isRaining;
+                if (this.isRaining) {
+                    for (let r = 0; r < MAP_ROWS; r++) {
+                        for (let c = 0; c < MAP_COLS; c++) {
+                            if (this.tiles[r][c].type === TILE_TYPES.TILLED) {
+                                this.tiles[r][c].watered = true;
+                            }
+                        }
+                    }
+                    this.spawnFloatingText(this.player.x, this.player.y - 20, "Rain started! Crops auto-watered 🌧️", "#38bdf8");
+                } else {
+                    this.spawnFloatingText(this.player.x, this.player.y - 20, "Skies cleared ☀️", "#fde047");
+                }
+                this.updateHUD();
+            }
+
+            // --- 5. MODDING SDK & INSPECTOR ---
+            toggleInspector() {
+                const drawer = document.getElementById('sdk-drawer');
+                drawer.classList.toggle('hidden');
+                this.syncInspectorJSON();
+            }
+
+            syncInspectorJSON() {
+                const editor = document.getElementById('sdk-json-editor');
+                if (editor) {
+                    editor.value = JSON.stringify(this.cropRegistry, null, 2);
+                }
+            }
+
+            applyCustomRegistry() {
+                const editor = document.getElementById('sdk-json-editor');
+                const status = document.getElementById('sdk-status');
+                try {
+                    const parsed = JSON.parse(editor.value);
+                    this.cropRegistry = parsed;
+                    this.buildHotbarItems();
+                    this.renderHotbarUI();
+                    status.textContent = "✅ Registry hot-reloaded at " + new Date().toLocaleTimeString();
+                    status.className = "text-[11px] text-emerald-400 mono-code";
+                    this.sfx.play('coin');
+                } catch (err) {
+                    status.textContent = "❌ JSON Syntax Error: " + err.message;
+                    status.className = "text-[11px] text-rose-400 mono-code";
+                    this.sfx.play('error');
+                }
+            }
+
+            saveToLocal(silent = false) {
+                try {
+                    const payload = {
+                        day: this.day,
+                        gold: this.gold,
+                        stamina: this.stamina,
+                        tiles: this.tiles,
+                        cropRegistry: this.cropRegistry
+                    };
+                    localStorage.setItem('openharvest_save_v1', JSON.stringify(payload));
+                    if (!silent) {
+                        this.spawnFloatingText(this.player.x, this.player.y - 20, "World Saved to LocalStorage 💾", "#4ade80");
+                    }
+                } catch (e) {}
+            }
+
+            loadFromLocal() {
+                try {
+                    const raw = localStorage.getItem('openharvest_save_v1');
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
+                    if (data.tiles && data.tiles.length === MAP_ROWS) {
+                        this.day = data.day || 1;
+                        this.gold = data.gold ?? 500;
+                        this.stamina = data.stamina ?? 100;
+                        this.tiles = data.tiles;
+                        if (data.cropRegistry) {
+                            this.cropRegistry = data.cropRegistry;
+                            this.buildHotbarItems();
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            resetWorld() {
+                localStorage.removeItem('openharvest_save_v1');
+                this.cropRegistry = JSON.parse(JSON.stringify(DEFAULT_CROP_REGISTRY));
+                this.day = 1;
+                this.gold = 500;
+                this.stamina = 100;
+                this.waterCanLevel = this.waterCanMax;
+                this.buildHotbarItems();
+                this.initMap();
+                this.renderHotbarUI();
+                this.updateHUD();
+                this.syncInspectorJSON();
+                this.spawnFloatingText(this.player.x, this.player.y, "Farm Reset to Default 🌱", "#fbbf24");
+            }
+
+            // --- 6. UI & HUD RENDERING ---
+            updateHUD() {
+                document.getElementById('hud-day').textContent = `Spring Day ${this.day}`;
+                document.getElementById('hud-gold').textContent = this.gold.toLocaleString();
+                document.getElementById('weather-icon').textContent = this.isRaining ? '🌧️' : '☀️';
+
+                const pct = Math.max(0, Math.min(100, (this.stamina / this.maxStamina) * 100));
+                const bar = document.getElementById('hud-stamina-bar');
+                bar.style.width = `${pct}%`;
+                document.getElementById('hud-stamina-text').textContent = `${Math.ceil(this.stamina)}/${this.maxStamina}`;
+            }
+
+            renderHotbarUI() {
+                const container = document.getElementById('hotbar-container');
+                container.innerHTML = '';
+
+                this.hotbar.forEach((item, idx) => {
+                    const active = idx === this.selectedSlot;
+                    const btn = document.createElement('button');
+                    btn.className = `hotbar-slot relative flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
+                        active ? 'active border-amber-400 text-white' : 'bg-slate-800/90 border-slate-700 text-slate-300 hover:bg-slate-800'
+                    }`;
+                    btn.onclick = () => this.selectSlot(idx);
+
+                    let badge = item.costText;
+                    if (item.id === 'water') {
+                        badge = `${this.waterCanLevel}/${this.waterCanMax}💧`;
+                    }
+
+                    btn.innerHTML = `
+                        <span class="absolute -top-1.5 -left-1.5 w-4 h-4 rounded bg-slate-950 border border-slate-600 text-[10px] mono-code flex items-center justify-center text-amber-400">${idx + 1}</span>
+                        <span class="text-xl">${item.icon}</span>
+                        <div class="text-left leading-tight">
+                            <div class="text-xs font-semibold whitespace-nowrap">${item.name}</div>
+                            <div class="text-[10px] mono-code ${item.type === 'seed' ? 'text-amber-400' : 'text-sky-300'}">${badge}</div>
+                        </div>
+                    `;
+                    container.appendChild(btn);
+                });
+            }
+
+            // --- 7. PARTICLES & FLOATING TEXT ---
+            spawnParticles(x, y, color, count = 10) {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 30 + Math.random() * 90;
+                    this.particles.push({
+                        x, y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed - 30,
+                        life: 0.4 + Math.random() * 0.3,
+                        maxLife: 0.7,
+                        color,
+                        size: 3 + Math.random() * 3
+                    });
+                }
+            }
+
+            spawnFloatingText(x, y, text, color = "#ffffff") {
+                this.floatingTexts.push({
+                    x, y,
+                    text,
+                    color,
+                    life: 1.2,
+                    maxLife: 1.2
+                });
+            }
+
+            // --- 8. UPDATE & RENDER LOOP ---
+            update(dt) {
+                // Time progression (1 game hour every ~15 real seconds)
+                this.timeMinutes += dt * 4;
+                if (this.timeMinutes >= 1440) this.timeMinutes = 480;
+                const hrs = Math.floor(this.timeMinutes / 60);
+                const mins = Math.floor(this.timeMinutes % 60);
+                const ampm = hrs >= 12 ? 'PM' : 'AM';
+                const dispHrs = hrs % 12 === 0 ? 12 : hrs % 12;
+                const timeEl = document.getElementById('hud-time');
+                if (timeEl) {
+                    timeEl.textContent = `${String(dispHrs).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
+                }
+
+                // Player Movement
+                let moveX = this.touchDir.x;
+                let moveY = this.touchDir.y;
+
+                if (this.keys['KeyW'] || this.keys['ArrowUp']) moveY = -1;
+                if (this.keys['KeyS'] || this.keys['ArrowDown']) moveY = 1;
+                if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveX = -1;
+                if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX = 1;
+
+                if (moveX !== 0 || moveY !== 0) {
+                    const len = Math.hypot(moveX, moveY);
+                    moveX /= len;
+                    moveY /= len;
+
+                    const nextX = this.player.x + moveX * this.player.speed * dt;
+                    const nextY = this.player.y + moveY * this.player.speed * dt;
+
+                    if (this.isWalkable(nextX, this.player.y)) this.player.x = nextX;
+                    if (this.isWalkable(this.player.x, nextY)) this.player.y = nextY;
+
+                    this.player.dirX = Math.round(moveX);
+                    this.player.dirY = Math.round(moveY);
+                    this.player.walkFrame += dt * 10;
+                } else {
+                    this.player.walkFrame = 0;
+                }
+
+                if (this.player.actionTimer > 0) {
+                    this.player.actionTimer -= dt;
+                }
+
+                if (this.dayTransitionAlpha > 0) {
+                    this.dayTransitionAlpha = Math.max(0, this.dayTransitionAlpha - dt * 1.4);
+                }
+
+                // Update Particles
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.vy += 220 * dt; // Gravity
+                    p.life -= dt;
+                    if (p.life <= 0) this.particles.splice(i, 1);
+                }
+
+                // Update Floating Text
+                for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+                    const ft = this.floatingTexts[i];
+                    ft.y -= 28 * dt;
+                    ft.life -= dt;
+                    if (ft.life <= 0) this.floatingTexts.splice(i, 1);
+                }
+
+                // Rain Particles
+                if (this.isRaining) {
+                    if (this.rainDrops.length < 70) {
+                        this.rainDrops.push({
+                            x: Math.random() * this.canvas.width,
+                            y: -10,
+                            speed: 350 + Math.random() * 150
+                        });
+                    }
+                    for (let i = this.rainDrops.length - 1; i >= 0; i--) {
+                        const r = this.rainDrops[i];
+                        r.y += r.speed * dt;
+                        r.x -= 60 * dt;
+                        if (r.y > this.canvas.height) {
+                            r.y = -10;
+                            r.x = Math.random() * this.canvas.width;
+                        }
+                    }
+                }
+
+                // Update Telemetry in SDK Drawer
+                const fpsEl = document.getElementById('sdk-fps');
+                if (fpsEl) {
+                    fpsEl.textContent = `${Math.round(this.fps)} FPS`;
+                    let cropCount = 0;
+                    for (let r = 0; r < MAP_ROWS; r++) {
+                        for (let c = 0; c < MAP_COLS; c++) {
+                            if (this.tiles[r][c].crop) cropCount++;
+                        }
+                    }
+                    document.getElementById('sdk-crops').textContent = `${cropCount} Planted`;
+                }
+            }
+
+            isWalkable(x, y) {
+                const col = Math.floor(x / TILE_SIZE);
+                const row = Math.floor(y / TILE_SIZE);
+                if (row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return false;
+                const t = this.tiles[row][col].type;
+                return t !== TILE_TYPES.FENCE && t !== TILE_TYPES.WATER && t !== TILE_TYPES.HOUSE && t !== TILE_TYPES.SHIPPING_BIN;
+            }
+
+            draw() {
+                const ctx = this.ctx;
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // 1. Render Tilemap
+                for (let r = 0; r < MAP_ROWS; r++) {
+                    for (let c = 0; c < MAP_COLS; c++) {
+                        const tile = this.tiles[r][c];
+                        const x = c * TILE_SIZE;
+                        const y = r * TILE_SIZE;
+
+                        // Base Grass / Dirt
+                        if (tile.type === TILE_TYPES.GRASS || tile.type === TILE_TYPES.FENCE || tile.type === TILE_TYPES.HOUSE || tile.type === TILE_TYPES.SHIPPING_BIN) {
+                            ctx.fillStyle = (r + c) % 2 === 0 ? '#4d9057' : '#468650';
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+                            if (tile.deco === 'flower') {
+                                ctx.fillStyle = '#fde047';
+                                ctx.fillRect(x + 14, y + 14, 5, 5);
+                                ctx.fillStyle = '#f43f5e';
+                                ctx.fillRect(x + 30, y + 28, 5, 5);
+                            } else if (tile.deco === 'pebble') {
+                                ctx.fillStyle = '#64748b';
+                                ctx.fillRect(x + 20, y + 22, 6, 4);
+                            }
+                        }
+                        else if (tile.type === TILE_TYPES.DIRT) {
+                            ctx.fillStyle = (r + c) % 2 === 0 ? '#9c6b3b' : '#936335';
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            // Subtle border
+                            ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+                            ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+                        }
+                        else if (tile.type === TILE_TYPES.TILLED) {
+                            ctx.fillStyle = tile.watered ? '#4a2c18' : '#78492a';
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            // Furrow lines
+                            ctx.fillStyle = tile.watered ? '#361f10' : '#5c361e';
+                            for (let fy = 8; fy < TILE_SIZE - 6; fy += 10) {
+                                ctx.fillRect(x + 5, y + fy, TILE_SIZE - 10, 4);
+                            }
+                        }
+                        else if (tile.type === TILE_TYPES.PATH) {
+                            ctx.fillStyle = '#94a3b8';
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            ctx.fillStyle = '#64748b';
+                            ctx.fillRect(x + 6, y + 6, 14, 14);
+                            ctx.fillRect(x + 26, y + 24, 16, 14);
+                        }
+                        else if (tile.type === TILE_TYPES.WATER) {
+                            const wave = Math.sin(performance.now() * 0.004 + c + r) * 3;
+                            ctx.fillStyle = '#0284c7';
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            ctx.fillStyle = '#38bdf8';
+                            ctx.fillRect(x + 8 + wave, y + 14, 18, 4);
+                            ctx.fillRect(x + 18 - wave, y + 32, 14, 3);
+                        }
+
+                        // Fence Posts
+                        if (tile.type === TILE_TYPES.FENCE) {
+                            ctx.fillStyle = '#78350f';
+                            ctx.fillRect(x + 10, y + 8, 28, 32);
+                            ctx.fillStyle = '#92400e';
+                            ctx.fillRect(x + 14, y + 12, 20, 24);
+                        }
+
+                        // Shipping Bin
+                        if (tile.type === TILE_TYPES.SHIPPING_BIN) {
+                            ctx.fillStyle = '#78350f';
+                            ctx.fillRect(x + 6, y + 12, 36, 30);
+                            ctx.fillStyle = '#f59e0b';
+                            ctx.fillRect(x + 4, y + 8, 40, 8);
+                            ctx.font = '10px Inter';
+                            ctx.fillStyle = '#fff';
+                            ctx.fillText('SHIP', x + 12, y + 31);
+                        }
+
+                        // Crops on Tile
+                        if (tile.crop) {
+                            this.drawCrop(ctx, tile, x, y);
+                        }
+                    }
+                }
+
+                // 2. Render Farmhouse Structure (Cols 2-4, Rows 1-2)
+                this.drawFarmhouse(ctx, 2 * TILE_SIZE, 1 * TILE_SIZE, 3 * TILE_SIZE, 2 * TILE_SIZE);
+
+                // 3. Target Tile Highlight Box
+                const target = this.getTargetTile();
+                if (target.col >= 0 && target.col < MAP_COLS && target.row >= 0 && target.row < MAP_ROWS) {
+                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+                    ctx.lineWidth = 2.5;
+                    ctx.strokeRect(target.col * TILE_SIZE + 2, target.row * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                }
+
+                // Hover Tile Highlight
+                if (this.hoveredTile.col >= 0 && this.hoveredTile.col < MAP_COLS && this.hoveredTile.row >= 0 && this.hoveredTile.row < MAP_ROWS) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeRect(this.hoveredTile.col * TILE_SIZE + 4, this.hoveredTile.row * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                }
+
+                // 4. Render Player Character
+                this.drawPlayer(ctx);
+
+                // 5. Render Particles
+                this.particles.forEach(p => {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+                    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+                });
+                ctx.globalAlpha = 1.0;
+
+                // 6. Weather Rain Overlay
+                if (this.isRaining) {
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    ctx.strokeStyle = 'rgba(125, 211, 252, 0.55)';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    this.rainDrops.forEach(r => {
+                        ctx.moveTo(r.x, r.y);
+                        ctx.lineTo(r.x - 4, r.y + 12);
+                    });
+                    ctx.stroke();
+                }
+
+                // 7. Floating Text Feedback
+                ctx.font = 'bold 13px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                this.floatingTexts.forEach(ft => {
+                    ctx.globalAlpha = Math.max(0, ft.life / ft.maxLife);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillText(ft.text, ft.x + 1, ft.y + 1);
+                    ctx.fillStyle = ft.color;
+                    ctx.fillText(ft.text, ft.x, ft.y);
+                });
+                ctx.globalAlpha = 1.0;
+
+                // 8. Sleep Transition Fade
+                if (this.dayTransitionAlpha > 0) {
+                    ctx.fillStyle = `rgba(2, 6, 23, ${this.dayTransitionAlpha})`;
+                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+            }
+
+            drawCrop(ctx, tile, x, y) {
+                const cropDef = this.cropRegistry[tile.crop.id];
+                if (!cropDef) return;
+
+                const progress = Math.min(1, tile.crop.daysGrown / cropDef.daysToGrow);
+
+                if (progress === 0) {
+                    // Stage 0: Planted Seeds
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(x + 16, y + 18, 4, 4);
+                    ctx.fillRect(x + 28, y + 24, 4, 4);
+                    ctx.fillRect(x + 20, y + 30, 4, 4);
+                } else if (progress < 0.5) {
+                    // Stage 1: Small Sprout
+                    ctx.fillStyle = '#4ade80';
+                    ctx.fillRect(x + 22, y + 22, 4, 12);
+                    ctx.fillRect(x + 16, y + 20, 6, 4);
+                    ctx.fillRect(x + 26, y + 20, 6, 4);
+                } else if (progress < 1.0) {
+                    // Stage 2: Medium Leafy Bush
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath();
+                    ctx.arc(x + 24, y + 24, 11, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#86efac';
+                    ctx.fillRect(x + 19, y + 16, 6, 6);
+                } else {
+                    // Stage 3: Ready to Harvest!
+                    const bounce = Math.sin(performance.now() * 0.006) * 2.5;
+                    ctx.fillStyle = '#16a34a';
+                    ctx.beginPath();
+                    ctx.arc(x + 24, y + 26, 13, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.font = '24px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(cropDef.harvestIcon || '🌾', x + 24, y + 32 + bounce);
+
+                    // Golden Ready Indicator Badge
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.beginPath();
+                    ctx.arc(x + 38, y + 10 + bounce, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            drawFarmhouse(ctx, x, y, w, h) {
+                // Cabin Walls
+                ctx.fillStyle = '#fef3c7';
+                ctx.fillRect(x + 8, y + 28, w - 16, h - 32);
+
+                // Wood Trim
+                ctx.fillStyle = '#92400e';
+                ctx.fillRect(x + 8, y + 28, 6, h - 32);
+                ctx.fillRect(x + w - 14, y + 28, 6, h - 32);
+
+                // Pitched Red Roof
+                ctx.fillStyle = '#dc2626';
+                ctx.beginPath();
+                ctx.moveTo(x, y + 34);
+                ctx.lineTo(x + w / 2, y + 4);
+                ctx.lineTo(x + w, y + 34);
+                ctx.closePath();
+                ctx.fill();
+
+                // Door
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(x + w / 2 - 14, y + h - 42, 28, 38);
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(x + w / 2 + 6, y + h - 24, 4, 4);
+
+                // Signpost
+                ctx.font = 'bold 11px Inter';
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.fillText('🛌 FARMHOUSE (Click to Sleep)', x + w / 2, y + 22);
+            }
+
+            drawPlayer(ctx) {
+                const px = this.player.x;
+                const py = this.player.y;
+                const bob = Math.abs(Math.sin(this.player.walkFrame)) * 3;
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(px, py + 16, 12, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Overalls / Body
+                ctx.fillStyle = '#2563eb';
+                ctx.fillRect(px - 10, py - 4 - bob, 20, 18);
+
+                // Red Shirt sleeves
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(px - 13, py - 4 - bob, 4, 12);
+                ctx.fillRect(px + 9, py - 4 - bob, 4, 12);
+
+                // Head
+                ctx.fillStyle = '#fde68a';
+                ctx.fillRect(px - 9, py - 18 - bob, 18, 15);
+
+                // Straw Farmer Hat
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(px - 14, py - 22 - bob, 28, 5);
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(px - 9, py - 27 - bob, 18, 6);
+
+                // Eyes based on facing direction
+                ctx.fillStyle = '#0f172a';
+                if (this.player.dirY >= 0) {
+                    ctx.fillRect(px - 5 + this.player.dirX * 2, py - 12 - bob, 3, 4);
+                    ctx.fillRect(px + 2 + this.player.dirX * 2, py - 12 - bob, 3, 4);
+                }
+
+                // Tool Swing Animation
+                if (this.player.actionTimer > 0) {
+                    const activeItem = this.hotbar[this.selectedSlot];
+                    if (activeItem) {
+                        ctx.font = '20px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(
+                            activeItem.icon,
+                            px + this.player.dirX * 24,
+                            py + this.player.dirY * 24
+                        );
+                    }
+                }
+            }
+
+            loop(timestamp) {
+                const dt = Math.min(0.1, (timestamp - this.lastTime) / 1000);
+                this.lastTime = timestamp;
+                if (dt > 0) this.fps = this.fps * 0.9 + (1 / dt) * 0.1;
+
+                this.update(dt);
+                this.draw();
+
+                requestAnimationFrame((t) => this.loop(t));
+            }
+        }
+
+        // Start Engine once DOM is ready
+        let game;
+        window.onload = () => {
+            game = new OpenHarvestEngine();
+        };
+    </script>
+</body>
+</html>
